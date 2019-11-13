@@ -11,8 +11,8 @@ Prometheus [exporters](https://prometheus.io/docs/instrumenting/writing_exporter
 
 ### Spot instance termination notice
 
-The Termination Notice is accessible to code running on the instance via the instance’s metadata at `http://169.254.169.254/latest/meta-data/spot/termination-time`. This field becomes available when the instance has been marked for termination and will contain the time when a shutdown signal will be sent to the instance’s operating system. 
-At that time, the Spot Instance Request’s bid status will be set to `marked-for-termination.`  
+The Termination Notice is accessible to code running on the instance via the instance’s metadata at `http://169.254.169.254/latest/meta-data/spot/termination-time`. This field becomes available when the instance has been marked for termination and will contain the time when a shutdown signal will be sent to the instance’s operating system.
+At that time, the Spot Instance Request’s bid status will be set to `marked-for-termination.`
 The bid status is accessible via the `DescribeSpotInstanceRequests` API for use by programs that manage Spot bids and instances.
 
 ### Quick start
@@ -55,15 +55,12 @@ The exporter can be started with this configuration to query this endpoint local
 ### Metrics
 
 ```
-# HELP aws_instance_metadata_service_available Metadata service available
-# TYPE aws_instance_metadata_service_available gauge
-aws_instance_metadata_service_available{instance_id="i-0d2aab13057917887"} 1
 # HELP aws_instance_termination_imminent Instance is about to be terminated
 # TYPE aws_instance_termination_imminent gauge
-aws_instance_termination_imminent{instance_action="stop",instance_id="i-0d2aab13057917887"} 1
+aws_instance_termination_imminent{availability_zone="us-east-1a",hostname="ip-10-23-24-150.ec2.internal",instance_id="i-05f2236177d4ba9ca",instance_type="m4.2xlarge",instance_action="terminate"} 1
 # HELP aws_instance_termination_in Instance will be terminated in
 # TYPE aws_instance_termination_in gauge
-aws_instance_termination_in{instance_id="i-0d2aab13057917887"} 119.888545
+aws_instance_termination_in{availability_zone="us-east-1a",hostname="ip-10-23-24-150.ec2.internal",instance_id="i-05f2236177d4ba9ca",instance_type="m4.2xlarge",instance_action="terminate"} 119.888545
 ```
 
 ### Default Hollowtrees node exporters associated to alerts:

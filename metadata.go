@@ -11,7 +11,6 @@ import (
 
 type terminationCollector struct {
 	metadataEndpoint     string
-	scrapeSuccessful     *prometheus.Desc
 	terminationIndicator *prometheus.Desc
 	terminationTime      *prometheus.Desc
 }
@@ -21,17 +20,47 @@ type InstanceAction struct {
 	Time   time.Time `json:"time"`
 }
 
+var (
+	labels = []string {
+		"availability_zone",
+		"hostname",
+		"instance_id",
+		"instance_type",
+	}
+)
+
+func (c *terminationCollector) getMetadata(path string) (string, error) {
+	timeout := time.Duration(1 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+
+	url := c.metadataEndpoint + path
+	idResp, err := client.Get(url)
+	if err != nil {
+		log.Errorf("error request metadata from %s: %s", url, err.Error())
+		return "", err
+	}
+	if idResp.StatusCode == 404 {
+		log.Errorf("endpoint %s not found", url)
+		return "", nil
+	}
+	defer idResp.Body.Close()
+	value, _ := ioutil.ReadAll(idResp.Body)
+
+	return string(value), nil
+
+}
+
 func NewTerminationCollector(me string) *terminationCollector {
 	return &terminationCollector{
 		metadataEndpoint:     me,
-		scrapeSuccessful:     prometheus.NewDesc("aws_instance_metadata_service_available", "Metadata service available", []string{"instance_id"}, nil),
-		terminationIndicator: prometheus.NewDesc("aws_instance_termination_imminent", "Instance is about to be terminated", []string{"instance_action", "instance_id"}, nil),
-		terminationTime:      prometheus.NewDesc("aws_instance_termination_in", "Instance will be terminated in", []string{"instance_id"}, nil),
+		terminationIndicator: prometheus.NewDesc("aws_instance_termination_imminent", "Instance is about to be terminated", append(labels, "instance_action"), nil),
+		terminationTime:      prometheus.NewDesc("aws_instance_termination_in", "Instance will be terminated in", labels, nil),
 	}
 }
 
 func (c *terminationCollector) Describe(ch chan<- *prometheus.Desc) {
-	ch <- c.scrapeSuccessful
 	ch <- c.terminationIndicator
 	ch <- c.terminationTime
 
@@ -39,54 +68,38 @@ func (c *terminationCollector) Describe(ch chan<- *prometheus.Desc) {
 
 func (c *terminationCollector) Collect(ch chan<- prometheus.Metric) {
 	log.Info("Fetching termination data from metadata-service")
-	timeout := time.Duration(1 * time.Second)
-	client := http.Client{
-		Timeout: timeout,
-	}
-	idResp, err := client.Get(c.metadataEndpoint + "instance-id")
-	var instanceId string
-	if err != nil {
-		log.Errorf("couldn't parse instance-id from metadata: %s", err.Error())
-		return
-	}
-	if idResp.StatusCode == 404 {
-		log.Errorf("couldn't parse instance-id from metadata: endpoint not found")
-		return
-	}
-	defer idResp.Body.Close()
-	body, _ := ioutil.ReadAll(idResp.Body)
-	instanceId = string(body)
 
-	resp, err := client.Get(c.metadataEndpoint + "spot/instance-action")
+	az, _ := c.getMetadata("placement/availability-zone")
+	hostname, _ := c.getMetadata("hostname")
+	instanceId, _ := c.getMetadata("instance-id")
+	instanceType, _ := c.getMetadata("instance-type")
+
+	action, err := c.getMetadata("spot/instance-action")
 	if err != nil {
 		log.Errorf("Failed to fetch data from metadata service: %s", err)
-		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 0, instanceId)
 		return
 	} else {
-		ch <- prometheus.MustNewConstMetric(c.scrapeSuccessful, prometheus.GaugeValue, 1, instanceId)
 
-		if resp.StatusCode == 404 {
+		if action == "" {
 			log.Debug("instance-action endpoint not found")
-			ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, "", instanceId)
+			ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, az, hostname, instanceId, instanceType, action)
 			return
 		} else {
-			defer resp.Body.Close()
-			body, _ := ioutil.ReadAll(resp.Body)
 
 			var ia = InstanceAction{}
-			err := json.Unmarshal(body, &ia)
+			err = json.Unmarshal([]byte(action), &ia)
 
 			// value may be present but not be a time according to AWS docs,
 			// so parse error is not fatal
 			if err != nil {
 				log.Errorf("Couldn't parse instance-action metadata: %s", err)
-				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, instanceId)
+				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 0, az, hostname, instanceId, instanceType, "")
 			} else {
 				log.Infof("instance-action endpoint available, termination time: %v", ia.Time)
-				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 1, ia.Action, instanceId)
+				ch <- prometheus.MustNewConstMetric(c.terminationIndicator, prometheus.GaugeValue, 1, az, hostname, instanceId, instanceType, ia.Action)
 				delta := ia.Time.Sub(time.Now())
 				if delta.Seconds() > 0 {
-					ch <- prometheus.MustNewConstMetric(c.terminationTime, prometheus.GaugeValue, delta.Seconds(), instanceId)
+					ch <- prometheus.MustNewConstMetric(c.terminationTime, prometheus.GaugeValue, delta.Seconds(), az, hostname, instanceId, instanceType)
 				}
 			}
 		}
