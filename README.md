@@ -57,7 +57,7 @@ The exporter can be started with this configuration to query this endpoint local
 ```
 # HELP aws_instance_termination_imminent Instance is about to be terminated
 # TYPE aws_instance_termination_imminent gauge
-aws_instance_termination_imminentt{availability_zone="us-east-1a",hostname="ip-10-23-24-150.ec2.internal",instance_id="i-05f2236177d4ba9ca",instance_type="m4.2xlarge",instance_action="terminate"} 1
+aws_instance_termination_imminent{availability_zone="us-east-1a",hostname="ip-10-23-24-150.ec2.internal",instance_id="i-05f2236177d4ba9ca",instance_type="m4.2xlarge",instance_action="terminate"} 1
 # HELP aws_instance_termination_in Instance will be terminated in
 # TYPE aws_instance_termination_in gauge
 aws_instance_termination_in{availability_zone="us-east-1a",hostname="ip-10-23-24-150.ec2.internal",instance_id="i-05f2236177d4ba9ca",instance_type="m4.2xlarge",instance_action="terminate"} 119.888545
